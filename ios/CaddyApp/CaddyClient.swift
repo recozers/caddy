@@ -25,6 +25,7 @@ final class CaddyClient {
         let dataURL = "data:image/jpeg;base64,\(jpeg.base64EncodedString())"
         let body: [String: Any] = [
             "image": dataURL,
+            "voice": true,   // glasses TTS — keep replies under ~25 words
             "conditions": [
                 "lie": conditions.lie,
                 "distance": conditions.distance,

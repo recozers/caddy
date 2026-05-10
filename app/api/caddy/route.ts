@@ -4,8 +4,12 @@ import { getCaddyAdvice, type Conditions } from "@/app/lib/caddy";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as { image?: string; conditions?: Conditions };
-  const { image, conditions } = body;
+  const body = (await req.json()) as {
+    image?: string;
+    conditions?: Conditions;
+    voice?: boolean;
+  };
+  const { image, conditions, voice } = body;
 
   let imagePart: { data: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" } | undefined;
   if (image && image.startsWith("data:image/")) {
@@ -16,7 +20,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const advice = await getCaddyAdvice({ image: imagePart, conditions });
+    const advice = await getCaddyAdvice({ image: imagePart, conditions, voice });
     return NextResponse.json({ advice });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Caddy call failed";
