@@ -1,0 +1,32 @@
+<!--
+Add these keys to your app target's Info.plist (Xcode Project → target → Info tab).
+The custom URL scheme handles the deeplink callback from the Meta AI app after registration.
+Replace `caddyapp` with your own scheme.
+-->
+<key>NSBluetoothAlwaysUsageDescription</key>
+<string>Used to communicate with your Meta glasses.</string>
+
+<key>NSMicrophoneUsageDescription</key>
+<string>Required so the glasses microphone can be used.</string>
+
+<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleURLName</key>
+    <string>com.yourcompany.caddyapp</string>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>caddyapp</string>
+    </array>
+  </dict>
+</array>
+
+<!-- Opt out of Meta's analytics if you want -->
+<key>MWDAT</key>
+<dict>
+  <key>Analytics</key>
+  <dict>
+    <key>OptOut</key>
+    <true/>
+  </dict>
+</dict>

@@ -1,60 +1,82 @@
 # AI Caddy
 
-A glasses-first AI golf caddy. You stand over the ball, voice-command your Meta glasses to send a photo + spoken context to a WhatsApp number, and the glasses read back a Claude-generated club + line + risk in your ear.
+A glasses-first AI golf caddy. You stand over the ball, capture a frame from your Meta glasses' camera, and the glasses read back a Claude-generated club + line + risk in your ear.
 
 ```
-"Hey Meta, send a photo to AI Caddy on WhatsApp.
- One fifty into the wind, slight uphill, fairway."
-                                ↓
-                  [glasses snap, transcribe, send]
-                                ↓
-                /api/whatsapp  (this server)
-                                ↓
-                Claude (vision + caddy prompt)
-                                ↓
-        "Smooth eight, aim left edge of the bunker, draw it back.
-         Don't go long — back pin, false front."
-                                ↓
-                       [glasses speak it]
+            ┌────────────────────────────────────┐
+            │   Oakley Meta Vanguard / Ray-Ban   │
+            │   Meta / Meta HSTN / Display       │
+            └─────────────┬──────────────────────┘
+              camera + audio over BT
+                          │
+            ┌─────────────▼──────────────────────┐
+            │   iPhone running CaddyApp          │
+            │   (Meta Wearables DAT SDK 0.6.0)   │
+            └─────────────┬──────────────────────┘
+              JPEG + shot conditions
+                          │
+            ┌─────────────▼──────────────────────┐
+            │   /api/caddy  (Next.js + Claude)   │
+            └─────────────┬──────────────────────┘
+              advice text
+                          │
+                  AVSpeechSynthesizer
+                          │
+                 ▶ glasses speakers
 ```
 
-## What's real
+## Status
 
 | Piece | Status |
 | --- | --- |
-| Glasses → server bridge | **Real** — uses Meta WhatsApp Cloud API on Oakley Meta Vanguard / Ray-Ban Meta / Oakley Meta HSTN. |
-| Vision + caddy reasoning | **Real** — Claude with a PGA-caddy system prompt, sees the image and the spoken context. |
-| Spoken reply on glasses | **Real** — glasses auto-read incoming WhatsApp messages aloud (or "Hey Meta, read it"). |
-| Distance / lie / wind | **Manual today** — say it in your voice command. Easy to swap for Garmin Golf + a weather API later. |
-| Native iOS app w/ Meta Wearables SDK | **Designed, not built** — see `docs/glasses-integration.md`. The SDK doesn't yet support Vanguard; when it does, swap the WhatsApp bridge for an iOS app calling the same backend. |
+| Native iOS app for Vanguards | **Real** — `ios/CaddyApp/` uses Meta Wearables Device Access Toolkit v0.6.0; Vanguard supported since v0.4.0 (firmware V22+). |
+| WhatsApp bridge (no-code-needed alt) | **Real** — `app/api/whatsapp/`. Uses "Hey Meta, send a photo to AI Caddy on WhatsApp" + glasses notification readout. |
+| Vision + caddy reasoning | **Real** — Claude (Opus) with a PGA-caddy system prompt. |
+| Spoken reply on glasses | **Real** — `AVSpeechSynthesizer` (native) or WhatsApp readout (bridge). |
+| Distance / lie / wind | **Manual today** (form on the iPhone, or spoken in the WhatsApp caption). Garmin Golf + a weather API are the obvious next sources — drop them onto `CaddyInput.conditions`. |
+| Desktop test page | **Real** — `/` uses your laptop webcam, for prompt iteration without touching the glasses. |
 
-## Routes
+## Routes & files
 
-- **`/api/whatsapp`** — webhook the glasses talk to (via WhatsApp Cloud API).
-- **`/api/caddy`** — the same caddy logic, callable directly with `{ image, conditions }`. Useful for the local web demo and for future native apps.
-- **`/`** — desktop test page: webcam POV + form + spoken reply, for iterating on the prompt without touching the glasses.
+- **`ios/CaddyApp/`** — SwiftUI app: pairs with glasses, opens a stream, captures a JPEG, calls `/api/caddy`, speaks the reply. See its README for Xcode setup.
+- **`/api/caddy`** — Backend endpoint. Takes `{ image, conditions }`, returns `{ advice }`. Used by both iOS and the desktop demo.
+- **`/api/whatsapp`** — WhatsApp Cloud API webhook. Verifies + receives image+caption, returns advice as a text reply (which the glasses read aloud).
+- **`/`** — Desktop POV: webcam + form + spoken reply. Useful for iterating on the prompt locally.
+- **`app/lib/caddy.ts`** — Single Claude call shared by all routes. `voice: true` mode keeps replies under ~25 words for glasses TTS.
+- **`docs/glasses-integration.md`** — SDK landscape, hardware support table, API quick reference, and the Route A vs B trade-offs.
 
-## Setup
+## Backend setup
 
 ```bash
 npm install
 cp .env.local.example .env.local
-# fill in ANTHROPIC_API_KEY and the three WHATSAPP_* vars
+# fill in ANTHROPIC_API_KEY
+# (the WHATSAPP_* vars are only needed if you're using the WhatsApp bridge)
 npm run dev
 ```
 
-For the WhatsApp bridge to actually receive messages, follow `docs/glasses-integration.md` → "Route A — WhatsApp bridge". You need:
-1. A Meta WhatsApp Business app (free).
-2. A public tunnel to your dev server (`cloudflared tunnel --url http://localhost:3000`) or a deploy.
-3. A webhook registered against `/api/whatsapp`.
-4. The test number saved in your phone contacts as "AI Caddy".
+For the iOS app to reach the dev server from your phone, expose it:
 
-For the desktop demo, just `npm run dev` and open http://localhost:3000.
+```bash
+cloudflared tunnel --url http://localhost:3000
+```
 
-## Files
+then paste the tunnel URL into `ios/CaddyApp/CaddyClient.swift` as `baseURL`.
 
-- `app/lib/caddy.ts` — Claude call. Same code path for both web and WhatsApp.
-- `app/api/whatsapp/route.ts` — webhook verification, message dedupe, media download, reply send.
-- `app/api/caddy/route.ts` — direct JSON endpoint.
-- `app/page.tsx` — desktop POV demo.
-- `docs/glasses-integration.md` — what works on which Meta hardware today, and the iOS/SDK migration path.
+## Native (iOS) setup
+
+See `ios/CaddyApp/README.md`. Short version: open Xcode, new SwiftUI app, drop the four `.swift` files in, add `https://github.com/facebook/meta-wearables-dat-ios` as a Swift Package, merge in the Info.plist keys from the snippet, set your tunnel URL, build and run on your iPhone.
+
+## WhatsApp bridge setup (no Xcode)
+
+See `docs/glasses-integration.md` → Route A. Short version: make a free WhatsApp Business app on developers.facebook.com, drop the three `WHATSAPP_*` vars in `.env.local`, expose the dev server with cloudflared, register `/api/whatsapp` as the webhook, save the test number in your contacts as "AI Caddy", send it a message from your phone first, then voice-command the glasses.
+
+## Hardware support (SDK v0.6.0, May 2026)
+
+| Glasses | Required firmware |
+| --- | --- |
+| Ray-Ban Meta (Gen 1, Gen 2) | V20 |
+| Ray-Ban Meta Optics | V20 |
+| Meta Ray-Ban Display | V21 |
+| Oakley Meta HSTN | V22 |
+| Oakley Meta Vanguard | V22 |
