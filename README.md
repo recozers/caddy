@@ -1,37 +1,60 @@
-# AI Caddy (prototype)
+# AI Caddy
 
-A glasses-style AI golf caddy. You point a camera down the target line, fill in lie / distance / wind, and Claude (vision) reads the terrain and tells you what to hit.
+A glasses-first AI golf caddy. You stand over the ball, voice-command your Meta glasses to send a photo + spoken context to a WhatsApp number, and the glasses read back a Claude-generated club + line + risk in your ear.
 
-## What's real and what's faked
+```
+"Hey Meta, send a photo to AI Caddy on WhatsApp.
+ One fifty into the wind, slight uphill, fairway."
+                                ↓
+                  [glasses snap, transcribe, send]
+                                ↓
+                /api/whatsapp  (this server)
+                                ↓
+                Claude (vision + caddy prompt)
+                                ↓
+        "Smooth eight, aim left edge of the bunker, draw it back.
+         Don't go long — back pin, false front."
+                                ↓
+                       [glasses speak it]
+```
 
-- **Camera POV** — uses your phone or laptop camera to simulate the glasses view.
-- **AI caddy logic** — real, calls Claude with the captured image + conditions.
-- **Spoken advice** — real, uses the browser's built-in text-to-speech.
-- **Meta Ray-Ban / Oakley integration** — *not real*. Meta does not yet expose a public live-camera SDK for third-party apps; the glasses talk to Meta AI, not to your code. Today's path to "real glasses" would be to take a photo on the glasses, sync via the Meta View app, then process — not live.
-- **Golf course / GPS API** — skipped for v1. You enter distance manually. Easy add later (GolfBert, Garmin, USGA-style data).
-- **Weather API** — skipped for v1. You enter wind/temp manually. Easy add later (OpenWeatherMap).
+## What's real
+
+| Piece | Status |
+| --- | --- |
+| Glasses → server bridge | **Real** — uses Meta WhatsApp Cloud API on Oakley Meta Vanguard / Ray-Ban Meta / Oakley Meta HSTN. |
+| Vision + caddy reasoning | **Real** — Claude with a PGA-caddy system prompt, sees the image and the spoken context. |
+| Spoken reply on glasses | **Real** — glasses auto-read incoming WhatsApp messages aloud (or "Hey Meta, read it"). |
+| Distance / lie / wind | **Manual today** — say it in your voice command. Easy to swap for Garmin Golf + a weather API later. |
+| Native iOS app w/ Meta Wearables SDK | **Designed, not built** — see `docs/glasses-integration.md`. The SDK doesn't yet support Vanguard; when it does, swap the WhatsApp bridge for an iOS app calling the same backend. |
+
+## Routes
+
+- **`/api/whatsapp`** — webhook the glasses talk to (via WhatsApp Cloud API).
+- **`/api/caddy`** — the same caddy logic, callable directly with `{ image, conditions }`. Useful for the local web demo and for future native apps.
+- **`/`** — desktop test page: webcam POV + form + spoken reply, for iterating on the prompt without touching the glasses.
 
 ## Setup
 
 ```bash
 npm install
-cp .env.local.example .env.local   # add your Anthropic key
+cp .env.local.example .env.local
+# fill in ANTHROPIC_API_KEY and the three WHATSAPP_* vars
 npm run dev
 ```
 
-Open http://localhost:3000 on a phone (real camera + GPS-style use) or laptop. Allow camera access.
+For the WhatsApp bridge to actually receive messages, follow `docs/glasses-integration.md` → "Route A — WhatsApp bridge". You need:
+1. A Meta WhatsApp Business app (free).
+2. A public tunnel to your dev server (`cloudflared tunnel --url http://localhost:3000`) or a deploy.
+3. A webhook registered against `/api/whatsapp`.
+4. The test number saved in your phone contacts as "AI Caddy".
 
-## Use
+For the desktop demo, just `npm run dev` and open http://localhost:3000.
 
-1. Point at your ball / target line.
-2. Tap **Capture frame**.
-3. Set lie, distance, wind, temperature, and your bag.
-4. Tap **Ask caddy** — advice appears in text and is spoken aloud.
+## Files
 
-## Next steps if you want to take it further
-
-- Pull distance + hole layout from a course API instead of typing it.
-- Pull wind/temp from a weather API by GPS.
-- Replace browser TTS with ElevenLabs for a better voice.
-- Wrap as a PWA so it installs on your phone.
-- When/if Meta opens a glasses SDK, swap the webcam for the glasses camera feed and route advice to glasses audio.
+- `app/lib/caddy.ts` — Claude call. Same code path for both web and WhatsApp.
+- `app/api/whatsapp/route.ts` — webhook verification, message dedupe, media download, reply send.
+- `app/api/caddy/route.ts` — direct JSON endpoint.
+- `app/page.tsx` — desktop POV demo.
+- `docs/glasses-integration.md` — what works on which Meta hardware today, and the iOS/SDK migration path.
